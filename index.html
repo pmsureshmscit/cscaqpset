@@ -54,7 +54,21 @@ body{
   color:#9fb0cf;
   letter-spacing:.06em;
   text-transform:uppercase;
+  flex:1;
 }
+.home-btn{
+  font-family:inherit;
+  font-size:12.5px;
+  font-weight:700;
+  padding:8px 16px;
+  border-radius:8px;
+  border:1.5px solid rgba(255,255,255,.28);
+  background:rgba(255,255,255,.08);
+  color:#f3ede0;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.home-btn:hover{ background:rgba(255,255,255,.16); }
 .card{
   background:var(--paper);
   border-radius:var(--radius);
@@ -467,6 +481,132 @@ body{
 /* page-count control: 25 marks fits one A4 page, 50/70 force a break before Part III */
 /* base sizing; exact per-paper size is set dynamically by fitToPages() below */
 
+.edit-btn{
+  font-family:'Inter',sans-serif;
+  font-size:10.5px;
+  font-weight:700;
+  padding:2px 8px;
+  margin-left:8px;
+  border-radius:100px;
+  border:1px solid #cdbfa0;
+  background:#f6efdd;
+  color:#7a5c15;
+  cursor:pointer;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+.edit-btn:hover{ background:#eee0bd; }
+.paper-sheet ol.qlist > li{ position:relative; }
+.paper-sheet .choice-q .qn-block{ position:relative; }
+
+/* ---------- edit modal ---------- */
+.modal-overlay{
+  position:fixed; inset:0;
+  background:rgba(15,20,35,.55);
+  display:flex; align-items:center; justify-content:center;
+  z-index:1000;
+  padding:20px;
+}
+.modal-overlay.hidden{ display:none; }
+.modal-box{
+  background:#fffdf8;
+  border-radius:14px;
+  width:100%;
+  max-width:600px;
+  max-height:88vh;
+  overflow-y:auto;
+  box-shadow:0 30px 70px -20px rgba(0,0,0,.5);
+  font-family:'Inter',sans-serif;
+}
+.modal-head{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:18px 22px;
+  border-bottom:1px solid #eadfc4;
+}
+.modal-head h3{
+  margin:0; font-family:'Source Serif 4',serif; font-size:18px; color:var(--slate-deep);
+}
+.modal-close{
+  background:none; border:none; font-size:18px; cursor:pointer; color:#8a8264;
+  padding:4px 8px;
+}
+.modal-body{ padding:20px 22px 24px; }
+.modal-current{
+  font-size:12.5px;
+  color:var(--ink-soft);
+  background:#f4efe1;
+  border-radius:8px;
+  padding:9px 12px;
+  margin-bottom:16px;
+}
+.modal-section label{
+  display:block;
+  font-size:12px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+  color:var(--slate);
+  margin-bottom:8px;
+}
+.modal-row{
+  display:grid;
+  grid-template-columns:1.6fr 1fr;
+  gap:10px;
+  margin-bottom:10px;
+}
+.modal-row select{
+  width:100%;
+  padding:9px 10px;
+  border:1.5px solid #ddd2b8;
+  border-radius:8px;
+  font-family:inherit;
+  font-size:13px;
+  background:#fff;
+}
+.modal-preview{
+  font-size:13px;
+  line-height:1.5;
+  background:#fff;
+  border:1px solid #e6dcc2;
+  border-radius:8px;
+  padding:10px 12px;
+  margin-bottom:12px;
+  min-height:44px;
+  white-space:pre-line;
+  color:#333;
+}
+.modal-divider{
+  text-align:center;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:#a5926a;
+  margin:18px 0;
+  position:relative;
+}
+.modal-divider::before, .modal-divider::after{
+  content:'';
+  position:absolute; top:50%; width:40%;
+  border-top:1px solid #e6dcc2;
+}
+.modal-divider::before{ left:0; }
+.modal-divider::after{ right:0; }
+.modal-section textarea{
+  width:100%;
+  padding:10px 12px;
+  border:1.5px solid #ddd2b8;
+  border-radius:8px;
+  font-family:inherit;
+  font-size:13px;
+  resize:vertical;
+  margin-bottom:10px;
+}
+.modal-section .btn{ width:100%; }
+
+@media print{
+  .edit-btn, .modal-overlay{ display:none !important; }
+}
+
 @media print{
   body{background:#fff !important;}
   .app-shell{padding:0; max-width:none;}
@@ -490,8 +630,9 @@ body{
 <body>
 <div class="app-shell">
   <div class="brand">
-    <span class="mark">வினாத் தாள் உருவாக்கம் · Exam Question Paper Creation</span>
-    <span class="tag">12th CS &amp; CA · Book-Back Question </span>
+    <span class="mark">பரீ​ட்சை · Exam Paper Studio</span>
+    <span class="tag">12th CS &amp; CA · Book-Back Question Generator</span>
+    <button class="home-btn" id="btn-home" title="Back to home">⌂ Home</button>
   </div>
 
   <div class="card">
@@ -619,6 +760,36 @@ body{
       </div>
     </div>
 
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="edit-modal-overlay">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Edit this question</h3>
+      <button class="modal-close" id="edit-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-current" id="edit-current-info">Currently: —</div>
+
+      <div class="modal-section">
+        <label>Option A — pick another question from a chapter</label>
+        <div class="modal-row">
+          <select id="edit-chapter-select"></select>
+          <select id="edit-qnum-select"></select>
+        </div>
+        <div class="modal-preview" id="edit-preview">Choose a chapter and question number to preview it here.</div>
+        <button class="btn btn-primary" id="edit-use-picked">Use this question</button>
+      </div>
+
+      <div class="modal-divider">or</div>
+
+      <div class="modal-section">
+        <label>Option B — write / edit the question text yourself</label>
+        <textarea id="edit-custom-text" rows="5" placeholder="Type the exact question text you want to appear on the paper..."></textarea>
+        <button class="btn btn-primary" id="edit-use-custom">Save this text</button>
+      </div>
+    </div>
   </div>
 </div>
 
