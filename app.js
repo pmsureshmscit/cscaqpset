@@ -61,9 +61,21 @@ function pool(chapterIds, subject, field){
   const out = [];
   chapterIds.forEach(id=>{
     const ch = subject.chapters.find(c=>c.id===id);
-    if(ch && ch[field]) ch[field].forEach(q=>out.push(q.replace(/\*/g,'').replace(/[ \t]+/g,' ').trim()));
+    if(ch && ch[field]) ch[field].forEach((q,i)=>out.push({
+      text: q.replace(/\*/g,'').replace(/[ \t]+/g,' ').trim(),
+      chId: ch.id,
+      num: i+1,
+    }));
   });
   return out;
+}
+
+function getChapterQuestion(subject, chId, field, num){
+  const ch = subject.chapters.find(c=>c.id===chId);
+  if(!ch || !ch[field]) return null;
+  const raw = ch[field][num-1];
+  if(raw === undefined) return null;
+  return raw.replace(/\*/g,'').replace(/[ \t]+/g,' ').trim();
 }
 
 function showScreen(id){
@@ -315,6 +327,10 @@ function fitToPages(sheetEl, html, targetPages){
   sheetEl.style.fontSize = best.toFixed(2) + 'px';
 }
 
+function editBtnHtml(field, idx){
+  return `<button type="button" class="edit-btn" data-field="${field}" data-idx="${idx}">✎ Edit</button>`;
+}
+
 function renderPaper(){
   const { mcqSel, q2Sel, q3Sel, q5Sel, scheme, t, subj, shortages } = state.lastPaper;
   const warnArea = document.getElementById('warn-area');
@@ -340,7 +356,7 @@ function renderPaper(){
   html += `<div class="part-head">${t.part1}<span class="marks-tag">(${scheme.mcqCount} × 1 = ${scheme.mcqCount})</span></div>`;
   html += `<div class="part-instr">${t.instr1}</div>`;
   html += `<ol class="qlist">`;
-  mcqSel.list.forEach(q=>{ html += `<li>${renderMCQItem(q)}</li>`; });
+  mcqSel.list.forEach((q,idx)=>{ html += `<li>${renderMCQItem(q.text)}${editBtnHtml('mcq',idx)}</li>`; });
   html += `</ol></div>`;
 
   // PART II
@@ -349,7 +365,7 @@ function renderPaper(){
   html += `<div class="part-head">${t.part2}<span class="marks-tag">(${twoTotal} × 2 = ${twoTotal*2})</span></div>`;
   html += `<div class="part-instr">${t.instr2(q2Sel.list.length, scheme.two.answer)}</div>`;
   html += `<ol class="qlist">`;
-  q2Sel.list.forEach(q=>{ html += `<li>${esc(q)}</li>`; });
+  q2Sel.list.forEach((q,idx)=>{ html += `<li>${esc(q.text)}${editBtnHtml('q2',idx)}</li>`; });
   html += `</ol></div>`;
 
   // PART III
@@ -358,7 +374,7 @@ function renderPaper(){
   html += `<div class="part-head">${t.part3}<span class="marks-tag">(${threeTotal} × 3 = ${threeTotal*3})</span></div>`;
   html += `<div class="part-instr">${t.instr3(q3Sel.list.length, scheme.three.answer)}</div>`;
   html += `<ol class="qlist">`;
-  q3Sel.list.forEach(q=>{ html += `<li>${esc(q)}</li>`; });
+  q3Sel.list.forEach((q,idx)=>{ html += `<li>${esc(q.text)}${editBtnHtml('q3',idx)}</li>`; });
   html += `</ol></div>`;
 
   // PART IV - choice pairs
@@ -366,21 +382,16 @@ function renderPaper(){
   html += `<div class="part part4">`;
   html += `<div class="part-head">${t.part4}<span class="marks-tag">(${fiveItems} × 5 = ${fiveItems*5})</span></div>`;
   html += `<div class="part-instr">${t.instr4}</div>`;
-  const pairs = [];
   for(let i=0;i<fiveItems;i++){
-    const a = q5Sel.list[i*2];
-    const b = q5Sel.list[i*2+1];
-    pairs.push([a,b]);
-  }
-  pairs.forEach((pair,idx)=>{
-    const num = idx+1;
-    const [a,b] = pair;
+    const aIdx = i*2, bIdx = i*2+1;
+    const a = q5Sel.list[aIdx], b = q5Sel.list[bIdx];
+    const num = i+1;
     html += `<div class="choice-q">`;
-    html += `<div class="qn-block"><span class="qn-label">${num}. (a)</span> ${a?esc(a):'<span style="color:#b33">— not enough questions available —</span>'}</div>`;
+    html += `<div class="qn-block"><span class="qn-label">${num}. (a)</span> ${a?esc(a.text):'<span style="color:#b33">— not enough questions available —</span>'}${editBtnHtml('q5',aIdx)}</div>`;
     html += `<div class="or">${t.or}</div>`;
-    html += `<div class="qn-block"><span class="qn-label">(b)</span> ${b?esc(b):'<span style="color:#b33">— not enough questions available —</span>'}</div>`;
+    html += `<div class="qn-block"><span class="qn-label">(b)</span> ${b?esc(b.text):'<span style="color:#b33">— not enough questions available —</span>'}${editBtnHtml('q5',bIdx)}</div>`;
     html += `</div>`;
-  });
+  }
   html += `</div>`;
 
   sheet.innerHTML = html;
@@ -395,8 +406,8 @@ document.getElementById('btn-print').addEventListener('click', ()=>{
   window.print();
 });
 document.getElementById('back-to-marks').addEventListener('click', ()=> showScreen('screen-marks'));
-document.getElementById('btn-reset').addEventListener('click', ()=>{
-  if(!confirm('Reset everything and start over?')) return;
+
+function resetAll(){
   state.subjectKey = null;
   state.selectedChapters = new Set();
   state.marks = null;
@@ -408,6 +419,111 @@ document.getElementById('btn-reset').addEventListener('click', ()=>{
   document.getElementById('exam-date').value = '';
   document.querySelectorAll('.marks-card').forEach(c=>c.classList.remove('selected'));
   showScreen('screen-login');
+}
+
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  if(!confirm('Reset everything and start over?')) return;
+  resetAll();
+});
+
+document.getElementById('btn-home').addEventListener('click', ()=>{
+  const hasProgress = state.subjectKey || state.lastPaper;
+  if(hasProgress && !confirm('Go back to the home screen? Your current subject, chapters, and any generated paper will be cleared.')) return;
+  resetAll();
+});
+
+// ---------------- edit-question modal ----------------
+const FIELD_KEY = { mcq:'mcqSel', q2:'q2Sel', q3:'q3Sel', q5:'q5Sel' };
+const editState = { field:null, idx:null };
+
+const editOverlay = document.getElementById('edit-modal-overlay');
+
+function openEditModal(field, idx){
+  editState.field = field;
+  editState.idx = idx;
+  const subj = state.lastPaper.subj;
+  const current = state.lastPaper[FIELD_KEY[field]].list[idx];
+
+  const infoEl = document.getElementById('edit-current-info');
+  if(current && current.chId){
+    infoEl.textContent = `Currently: Chapter ${current.chId}, question ${current.num} of this section.`;
+  } else if(current && current.custom){
+    infoEl.textContent = `Currently: a custom question you wrote.`;
+  } else {
+    infoEl.textContent = `Currently: empty (not enough questions were available).`;
+  }
+
+  // populate chapter dropdown
+  const chSel = document.getElementById('edit-chapter-select');
+  chSel.innerHTML = subj.chapters.map(ch=>{
+    const label = ch.title ? `Ch. ${ch.id} — ${titleCase(ch.title)}` : `Chapter ${ch.id}`;
+    return `<option value="${ch.id}">${label}</option>`;
+  }).join('');
+  if(current && current.chId) chSel.value = String(current.chId);
+
+  refreshQnumOptions();
+  chSel.onchange = refreshQnumOptions;
+  document.getElementById('edit-qnum-select').onchange = updatePickPreview;
+
+  document.getElementById('edit-custom-text').value = current ? current.text : '';
+
+  editOverlay.classList.remove('hidden');
+}
+
+function refreshQnumOptions(){
+  const subj = state.lastPaper.subj;
+  const chId = parseInt(document.getElementById('edit-chapter-select').value, 10);
+  const ch = subj.chapters.find(c=>c.id===chId);
+  const count = ch ? (ch[editState.field] || []).length : 0;
+  const qSel = document.getElementById('edit-qnum-select');
+  const current = state.lastPaper[FIELD_KEY[editState.field]].list[editState.idx];
+  let opts = [];
+  for(let i=1;i<=count;i++) opts.push(`<option value="${i}">Q${i}</option>`);
+  qSel.innerHTML = opts.join('') || '<option value="">No questions in this chapter</option>';
+  if(current && current.chId === chId && current.num) qSel.value = String(current.num);
+  updatePickPreview();
+}
+
+function updatePickPreview(){
+  const subj = state.lastPaper.subj;
+  const chId = parseInt(document.getElementById('edit-chapter-select').value, 10);
+  const num = parseInt(document.getElementById('edit-qnum-select').value, 10);
+  const preview = document.getElementById('edit-preview');
+  const text = getChapterQuestion(subj, chId, editState.field, num);
+  preview.textContent = text || 'Select a chapter and question number to preview it here.';
+}
+
+function closeEditModal(){
+  editOverlay.classList.add('hidden');
+}
+
+document.getElementById('edit-modal-close').addEventListener('click', closeEditModal);
+editOverlay.addEventListener('click', (e)=>{ if(e.target === editOverlay) closeEditModal(); });
+
+document.getElementById('edit-use-picked').addEventListener('click', ()=>{
+  const subj = state.lastPaper.subj;
+  const chId = parseInt(document.getElementById('edit-chapter-select').value, 10);
+  const num = parseInt(document.getElementById('edit-qnum-select').value, 10);
+  const text = getChapterQuestion(subj, chId, editState.field, num);
+  if(!text){ alert('Please choose a valid chapter and question number.'); return; }
+  state.lastPaper[FIELD_KEY[editState.field]].list[editState.idx] = { text, chId, num };
+  closeEditModal();
+  renderPaper();
+});
+
+document.getElementById('edit-use-custom').addEventListener('click', ()=>{
+  const text = document.getElementById('edit-custom-text').value.trim();
+  if(!text){ alert('Please type the question text first.'); return; }
+  state.lastPaper[FIELD_KEY[editState.field]].list[editState.idx] = { text, chId:null, num:null, custom:true };
+  closeEditModal();
+  renderPaper();
+});
+
+// event delegation: edit buttons are re-created on every render
+document.getElementById('paper-sheet').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.edit-btn');
+  if(!btn) return;
+  openEditModal(btn.dataset.field, parseInt(btn.dataset.idx, 10));
 });
 
 })();
