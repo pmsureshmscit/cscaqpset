@@ -1709,10 +1709,6 @@ function renderPaper(){
       <span>${state.date ? esc(state.date) : ''}</span>
       <span>${t.marksLabel}: ${state.marks}</span>
     </div>`;
-  if(prioritizePYQ){
-    html += `<div class="pyq-badge">≈${pyqSharePct}% of this paper's questions have repeated across multiple past public exams (Mar 2020 – Jun 2025)</div>`;
-  }
-
   // A single running counter gives every question in the paper — across all
   // four parts — one continuous serial number (1, 2, 3 … ) instead of each
   // part restarting its own numbering.
