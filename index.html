@@ -8,11 +8,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;500;600;700&family=Noto+Serif+Tamil:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- client-side HTML → Word (.docx) converter, used by the "Download as Word" button -->
 <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
-<!-- Vercel Web Analytics -->
-<script>
-  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-</script>
-<script defer src="/_vercel/insights/script.js"></script>
 <style>
 :root{
   --ink:#1c2230;
@@ -543,6 +538,12 @@ body{
   margin-bottom:5px;
   color:#333;
   text-align:center;
+}
+.paper-sheet .compulsory-tag{
+  font-weight:700;
+  font-size:10.5px;
+  color:#b3261e;
+  font-style:italic;
 }
 .paper-sheet ol.qlist{
   margin:0 0 2px;
@@ -1184,25 +1185,36 @@ const TWIN_SUBJECT_KEY = {
 const SCHEMES = {
   25: { mcqCount:5, two:{show:4, answer:3}, three:{show:4, answer:3}, five:{items:1} },
   50: { mcqCount:10, two:{show:7, answer:5}, three:{show:7, answer:5}, five:{items:3} },
-  70: { mcqCount:15, two:{show:8, answer:6}, three:{show:8, answer:6}, five:{items:5} },
+  // 70-mark public-exam pattern: Part II and Part III each show one extra
+  // question beyond the "answer any" pool — that extra (always the LAST
+  // question in the part) is compulsory and must be among the answers.
+  // Marks are unaffected (still answer×marks) since the compulsory question
+  // is one of the "any N" answered, not an addition to it.
+  70: { mcqCount:15, two:{show:9, answer:6, compulsoryLast:true}, three:{show:9, answer:6, compulsoryLast:true}, five:{items:5} },
 };
 
 const I18N = {
   en: {
     part1: "Part – I", instr1: "Answer all the questions. Choose the correct option.",
     part2: "Part – II", instr2: (n,m)=>`Answer any ${m} of the following ${n} questions.`,
+    instr2Compulsory: (n,m,qno)=>`Answer any ${m} of the following ${n} questions. Question No. ${qno} is compulsory.`,
     part3: "Part – III", instr3: (n,m)=>`Answer any ${m} of the following ${n} questions.`,
+    instr3Compulsory: (n,m,qno)=>`Answer any ${m} of the following ${n} questions. Question No. ${qno} is compulsory.`,
     part4: "Part – IV", instr4: "Answer all the following questions, choosing either (a) or (b) in each.",
     or: "OR", timeDefault:"3:00 Hrs", marksLabel:"Marks", timeLabel:"Time",
     noQuestions:"Not enough questions were available in the selected chapters for this section — showing all that could be found.",
+    compulsoryTag: "(Compulsory)",
   },
   ta: {
     part1: "பகுதி – I", instr1: "அனைத்து வினாக்களுக்கும் விடையளிக்கவும். சரியான விடையைத் தேர்ந்தெடுக்கவும்.",
     part2: "பகுதி – II", instr2: (n,m)=>`கொடுக்கப்பட்ட ${n} வினாக்களில் ஏதேனும் ${m}-ற்கு விடையளிக்கவும்.`,
+    instr2Compulsory: (n,m,qno)=>`கொடுக்கப்பட்ட ${n} வினாக்களில் ஏதேனும் ${m}-ற்கு விடையளிக்கவும். வினா எண் ${qno} கட்டாயம்.`,
     part3: "பகுதி – III", instr3: (n,m)=>`கொடுக்கப்பட்ட ${n} வினாக்களில் ஏதேனும் ${m}-ற்கு விடையளிக்கவும்.`,
+    instr3Compulsory: (n,m,qno)=>`கொடுக்கப்பட்ட ${n} வினாக்களில் ஏதேனும் ${m}-ற்கு விடையளிக்கவும். வினா எண் ${qno} கட்டாயம்.`,
     part4: "பகுதி – IV", instr4: "அனைத்து வினாக்களுக்கும் (அ) அல்லது (ஆ) ஏதேனும் ஒன்றைத் தேர்ந்தெடுத்து விடையளிக்கவும்.",
     or: "அல்லது", timeDefault:"3:00 மணி நேரம்", marksLabel:"மதிப்பெண்கள்", timeLabel:"நேரம்",
     noQuestions:"தேர்ந்தெடுக்கப்பட்ட பாடங்களில் இந்தப் பகுதிக்கு போதுமான வினாக்கள் இல்லை — கிடைத்தவை அனைத்தும் காட்டப்பட்டுள்ளன.",
+    compulsoryTag: "(கட்டாயம்)",
   }
 };
 
@@ -1701,35 +1713,52 @@ function renderPaper(){
     html += `<div class="pyq-badge">≈${pyqSharePct}% of this paper's questions have repeated across multiple past public exams (Mar 2020 – Jun 2025)</div>`;
   }
 
+  // A single running counter gives every question in the paper — across all
+  // four parts — one continuous serial number (1, 2, 3 … ) instead of each
+  // part restarting its own numbering.
+  let qNo = 0;
+
   // PART I - MCQ
   if(scheme.mcqCount > 0){
     html += `<div class="part part1">`;
     html += `<div class="part-head">${t.part1}<span class="marks-tag">(${scheme.mcqCount} × 1 = ${scheme.mcqCount})</span></div>`;
     html += `<div class="part-instr">${t.instr1}</div>`;
     html += `<ol class="qlist">`;
-    mcqSel.list.forEach((q,idx)=>{ html += `<li>${renderMCQItem(q.text)}${editBtnHtml('mcq',idx)}</li>`; });
+    mcqSel.list.forEach((q,idx)=>{ qNo++; html += `<li value="${qNo}">${renderMCQItem(q.text)}${editBtnHtml('mcq',idx)}</li>`; });
     html += `</ol></div>`;
   }
 
   // PART II
   const twoTotal = scheme.two.answer;
   if(twoTotal > 0){
+    const hasCompulsory = !!scheme.two.compulsoryLast && q2Sel.list.length > 0;
+    const compulsoryQNo = qNo + q2Sel.list.length; // number of the LAST question in this part
     html += `<div class="part part2">`;
     html += `<div class="part-head">${t.part2}<span class="marks-tag">(${twoTotal} × 2 = ${twoTotal*2})</span></div>`;
-    html += `<div class="part-instr">${t.instr2(q2Sel.list.length, scheme.two.answer)}</div>`;
+    html += `<div class="part-instr">${hasCompulsory ? t.instr2Compulsory(q2Sel.list.length, scheme.two.answer, compulsoryQNo) : t.instr2(q2Sel.list.length, scheme.two.answer)}</div>`;
     html += `<ol class="qlist">`;
-    q2Sel.list.forEach((q,idx)=>{ html += `<li>${esc(q.text)}${editBtnHtml('q2',idx)}</li>`; });
+    q2Sel.list.forEach((q,idx)=>{
+      qNo++;
+      const isLast = hasCompulsory && idx === q2Sel.list.length - 1;
+      html += `<li value="${qNo}">${esc(q.text)}${isLast ? ` <span class="compulsory-tag">${t.compulsoryTag}</span>` : ''}${editBtnHtml('q2',idx)}</li>`;
+    });
     html += `</ol></div>`;
   }
 
   // PART III
   const threeTotal = scheme.three.answer;
   if(threeTotal > 0){
+    const hasCompulsory = !!scheme.three.compulsoryLast && q3Sel.list.length > 0;
+    const compulsoryQNo = qNo + q3Sel.list.length; // number of the LAST question in this part
     html += `<div class="part part3">`;
     html += `<div class="part-head">${t.part3}<span class="marks-tag">(${threeTotal} × 3 = ${threeTotal*3})</span></div>`;
-    html += `<div class="part-instr">${t.instr3(q3Sel.list.length, scheme.three.answer)}</div>`;
+    html += `<div class="part-instr">${hasCompulsory ? t.instr3Compulsory(q3Sel.list.length, scheme.three.answer, compulsoryQNo) : t.instr3(q3Sel.list.length, scheme.three.answer)}</div>`;
     html += `<ol class="qlist">`;
-    q3Sel.list.forEach((q,idx)=>{ html += `<li>${esc(q.text)}${editBtnHtml('q3',idx)}</li>`; });
+    q3Sel.list.forEach((q,idx)=>{
+      qNo++;
+      const isLast = hasCompulsory && idx === q3Sel.list.length - 1;
+      html += `<li value="${qNo}">${esc(q.text)}${isLast ? ` <span class="compulsory-tag">${t.compulsoryTag}</span>` : ''}${editBtnHtml('q3',idx)}</li>`;
+    });
     html += `</ol></div>`;
   }
 
@@ -1742,7 +1771,8 @@ function renderPaper(){
     for(let i=0;i<fiveItems;i++){
       const aIdx = i*2, bIdx = i*2+1;
       const a = q5Sel.list[aIdx], b = q5Sel.list[bIdx];
-      const num = i+1;
+      qNo++;
+      const num = qNo;
       html += `<div class="choice-q">`;
       html += `<div class="qn-block"><span class="qn-label">${num}. (a)</span> ${a?esc(a.text):'<span style="color:#b33">— not enough questions available —</span>'}${editBtnHtml('q5',aIdx)}</div>`;
       html += `<div class="or">${t.or}</div>`;
@@ -1790,6 +1820,7 @@ document.getElementById('btn-download-word').addEventListener('click', ()=>{
       .choice-q{ margin-bottom:14px; }
       .qn-label{ font-weight:700; }
       .or{ text-align:center; font-weight:700; margin:4px 0; }
+      .compulsory-tag{ font-weight:700; color:#b3261e; font-style:italic; }
     </style>
     </head><body>${cleanSheet.innerHTML}</body></html>`;
   const converted = htmlDocx.asBlob(docHtml);
