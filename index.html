@@ -428,6 +428,17 @@ body{
   background:#fffefb;
 }
 .field input:focus{outline:2px solid var(--brass-soft); outline-offset:1px;}
+.field select{
+  width:100%;
+  padding:10px 12px;
+  border-radius:8px;
+  border:1.3px solid #ddd2b8;
+  background:#fffdf8;
+  font-family:inherit;
+  font-size:13.5px;
+  color:#1c2230;
+}
+.field select:focus{outline:2px solid var(--brass-soft); outline-offset:1px;}
 .field-row{display:grid; grid-template-columns:2fr 1fr 1fr; gap:14px;}
 
 /* ---------- Buttons ---------- */
@@ -547,7 +558,7 @@ body{
 }
 .paper-sheet ol.qlist{
   margin:0 0 2px;
-  padding-left:19px;
+  padding-left:2.1em;
 }
 .paper-sheet ol.qlist > li{
   margin-bottom:4px;
@@ -565,11 +576,24 @@ body{
   margin:2px 0 0 2px;
 }
 .paper-sheet .mcq-options.grid2{
-  display:grid;
-  grid-template-columns:1fr 1fr;
+  /* Natural flow instead of a fixed 2-column grid: options only wrap to the
+     next line when they genuinely don't fit, so short options pack several
+     per line and the right margin isn't left empty. */
+  display:flex;
+  flex-wrap:wrap;
   column-gap:22px;
   row-gap:3px;
   margin:2px 0 0 2px;
+}
+.paper-sheet .mcq-options.stack{
+  /* Used only when options are genuinely too long to share a line. */
+  display:flex;
+  flex-direction:column;
+  row-gap:3px;
+  margin:2px 0 0 2px;
+}
+.paper-sheet .mcq-options.stack .opt-item{
+  display:block;
 }
 .paper-sheet .mcq-options .opt-item{
   white-space:pre-line;
@@ -802,11 +826,11 @@ body{
 @media print{
   body{background:#fff !important;}
   .app-shell{padding:0; max-width:none;}
-  .brand,.steps,.toolbar,.btn-row,.site-footer{display:none !important;}
+  .brand,.steps,.toolbar,.btn-row,.site-footer,.page-count-row{display:none !important;}
   .card{box-shadow:none; border:none; padding:0; border-radius:0;}
   .warn-banner{display:none !important;}
   .paper-sheet{border:none; padding:0;}
-  @page{ size:A4; margin:6mm; }
+  @page{ size:A4; margin:6mm 6mm 6mm 12mm; }
 }
 
 @media (max-width:760px){
@@ -1056,6 +1080,16 @@ body{
         </div>
       </div>
 
+      <div class="field" style="max-width:340px;">
+        <label>Print length</label>
+        <select id="exam-page-count">
+          <option value="auto" selected>Auto (based on marks)</option>
+          <option value="1">Fit to 1 page (compact font)</option>
+          <option value="2">Fit to 2 pages (larger, easier to read)</option>
+          <option value="3">Fit to 3 pages (largest font)</option>
+        </select>
+      </div>
+
       <div class="btn-row">
         <button class="btn btn-ghost" id="back-to-chapters">← Back</button>
         <button class="btn btn-primary" id="to-generate" disabled>Generate question paper →</button>
@@ -1066,12 +1100,23 @@ body{
     <div class="screen" id="screen-paper">
       <div class="toolbar">
         <h2 style="margin:0;font-family:'Source Serif 4',serif;">Your question paper</h2>
-        <div style="display:flex; gap:10px;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <button class="btn btn-ghost" id="btn-regenerate">🔀 Shuffle again</button>
           <button class="btn btn-ghost" id="btn-twin-medium" style="display:none;">🌐 Also create in other medium</button>
           <button class="btn btn-primary" id="btn-print">⬇ Download / Print PDF</button>
           <button class="btn btn-primary" id="btn-download-word">⬇ Download as Word</button>
         </div>
+      </div>
+      <div class="page-count-row" style="display:flex; justify-content:center; margin:6px 0 14px;">
+        <label style="font-size:12.5px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;">
+          No. of pages:
+          <select id="paper-page-count" style="padding:6px 8px; border-radius:8px; border:1.3px solid #ddd2b8; font-size:12.5px;">
+            <option value="auto">Auto</option>
+            <option value="1">1 page</option>
+            <option value="2">2 pages</option>
+            <option value="3">3 pages</option>
+          </select>
+        </label>
       </div>
       <div id="warn-area"></div>
       <div class="paper-sheet" id="paper-sheet"></div>
@@ -1227,6 +1272,7 @@ const state = {
   school: "",
   time: "",
   date: "",
+  pageChoice: "auto",
   lastPaper: null,
 };
 
@@ -1475,6 +1521,7 @@ document.getElementById('to-generate').addEventListener('click', ()=>{
   state.school = document.getElementById('exam-school').value.trim();
   state.time = document.getElementById('exam-time').value.trim();
   state.date = document.getElementById('exam-date').value.trim();
+  state.pageChoice = document.getElementById('exam-page-count').value || 'auto';
   generatePaper();
   showScreen('screen-paper');
 });
@@ -1627,9 +1674,11 @@ function renderMCQItem(raw){
     return `<div class="mcq-stem">${esc(raw)}</div>`;
   }
   const maxLen = Math.max(...options.map(o=>o.length));
-  const totalLen = options.reduce((s,o)=>s+o.length, 0);
-  const useGrid = maxLen > 28 || totalLen > 70;
-  const cls = 'mcq-options ' + (useGrid ? 'grid2' : 'flow');
+  // Only stack options one-per-line when they are genuinely too long to
+  // share a row (e.g. multi-sentence options). Otherwise let them flow
+  // naturally so short options pack several to a line instead of leaving
+  // the right side of the row empty.
+  const cls = 'mcq-options ' + (maxLen > 55 ? 'stack' : 'flow');
   const optsHtml = options.map(o=>`<span class="opt-item">${esc(o)}</span>`).join('');
   return `<div class="mcq-stem">${esc(stem)}</div><div class="${cls}">${optsHtml}</div>`;
 }
@@ -1638,10 +1687,10 @@ function renderMCQItem(raw){
 // that 25-mark papers land on one A4 page and 50/70-mark papers land on two,
 // regardless of how long the randomly-picked questions happen to be.
 const MM_TO_PX = 96/25.4;
-const PAGE_MARGIN_MM = 6;
+const PAGE_MARGIN_TOP_MM = 6, PAGE_MARGIN_RIGHT_MM = 6, PAGE_MARGIN_BOTTOM_MM = 6, PAGE_MARGIN_LEFT_MM = 12;
 const A4_W_MM = 210, A4_H_MM = 297;
-const PAGE_CONTENT_W = (A4_W_MM - PAGE_MARGIN_MM*2) * MM_TO_PX;
-const PAGE_CONTENT_H = (A4_H_MM - PAGE_MARGIN_MM*2) * MM_TO_PX;
+const PAGE_CONTENT_W = (A4_W_MM - PAGE_MARGIN_LEFT_MM - PAGE_MARGIN_RIGHT_MM) * MM_TO_PX;
+const PAGE_CONTENT_H = (A4_H_MM - PAGE_MARGIN_TOP_MM - PAGE_MARGIN_BOTTOM_MM) * MM_TO_PX;
 
 function measureHeightAtFont(html, fontPx){
   let clone = document.getElementById('__fit_clone__');
@@ -1663,9 +1712,9 @@ function measureHeightAtFont(html, fontPx){
 }
 
 function fitToPages(sheetEl, html, targetPages){
-  const SAFETY = 0.90; // buffer against clone-vs-real-print rounding differences
+  const SAFETY = 0.94; // buffer against clone-vs-real-print rounding differences
   const budget = targetPages * PAGE_CONTENT_H * SAFETY;
-  const maxFont = 13.5, minFont = 9.5;
+  const maxFont = 15.5, minFont = 10;
   let lo = minFont, hi = maxFont, best = minFont;
   for(let i=0;i<9;i++){
     const mid = (lo+hi)/2;
@@ -1783,10 +1832,28 @@ function renderPaper(){
   }
 
   sheet.innerHTML = html;
-  const targetPages = state.marks <= 25 ? 1 : Math.ceil(state.marks / 35) + 1;
+  const autoPages = state.marks <= 25 ? 1 : Math.ceil(state.marks / 35) + 1;
+  const targetPages = (state.pageChoice && state.pageChoice !== 'auto')
+    ? parseInt(state.pageChoice, 10)
+    : autoPages;
   fitToPages(sheet, html, targetPages);
+  renderPageCountControl();
 }
 
+function renderPageCountControl(){
+  const sel = document.getElementById('paper-page-count');
+  if(sel) sel.value = state.pageChoice || 'auto';
+}
+document.getElementById('paper-page-count').addEventListener('change', (e)=>{
+  state.pageChoice = e.target.value;
+  const sheet = document.getElementById('paper-sheet');
+  if(!sheet || !sheet.innerHTML) return;
+  const autoPages = state.marks <= 25 ? 1 : Math.ceil(state.marks / 35) + 1;
+  const targetPages = (state.pageChoice && state.pageChoice !== 'auto')
+    ? parseInt(state.pageChoice, 10)
+    : autoPages;
+  fitToPages(sheet, sheet.innerHTML, targetPages);
+});
 document.getElementById('btn-regenerate').addEventListener('click', ()=>{
   generatePaper();
 });
@@ -1815,7 +1882,7 @@ document.getElementById('btn-download-word').addEventListener('click', ()=>{
       .ph-meta{ display:flex; justify-content:space-between; font-weight:600; margin-bottom:14px; }
       .part-head{ font-weight:700; font-size:13pt; margin-top:16px; }
       .part-instr{ font-style:italic; margin-bottom:8px; }
-      ol.qlist{ padding-left:22px; }
+      ol.qlist{ padding-left:2.1em; }
       ol.qlist > li{ margin-bottom:10px; }
       .choice-q{ margin-bottom:14px; }
       .qn-label{ font-weight:700; }
@@ -1850,11 +1917,13 @@ function resetAll(){
   state.isCustomMarks = false;
   state.customScheme = null;
   state.title = ''; state.school=''; state.time=''; state.date='';
+  state.pageChoice = 'auto';
   state.lastPaper = null;
   document.getElementById('exam-title').value = '';
   document.getElementById('exam-school').value = '';
   document.getElementById('exam-time').value = '';
   document.getElementById('exam-date').value = '';
+  document.getElementById('exam-page-count').value = 'auto';
   document.querySelectorAll('.marks-card').forEach(c=>c.classList.remove('selected'));
   document.getElementById('custom-marks-panel').classList.remove('open');
   showScreen('screen-login');
