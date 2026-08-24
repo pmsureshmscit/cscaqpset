@@ -1756,7 +1756,7 @@ function renderPaper(){
 
   html += `<div class="ph-title">${esc(state.title || 'Question Paper')}</div>`;
   if(state.school) html += `<div class="ph-sub">${esc(state.school)}</div>`;
-  html += `<div class="ph-sub">${esc(subj.label)} — Std. 12</div>`;
+  html += `<div class="ph-sub">${esc(subj.label)}</div>`;
   html += `<div class="ph-meta">
       <span>${t.timeLabel}: ${esc(state.time || t.timeDefault)}</span>
       <span>${state.date ? esc(state.date) : ''}</span>
